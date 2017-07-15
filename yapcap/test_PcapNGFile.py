@@ -78,7 +78,7 @@ class TestPcapNGFile(unittest.TestCase):
     def test_read_pkt_truncated_header(self):
         # write block type
         self.tmp_fp.write(bytes([0x0A, 0x0D, 0x0D, 0x0A]))
-        # write total length (short)
+        # write total length
         self.tmp_fp.write(bytes([0, 0, 0, 28]))
         # write byte order magic
         self.tmp_fp.write(bytes([0x1A, 0x2B, 0x3C, 0x4D]))
@@ -95,7 +95,35 @@ class TestPcapNGFile(unittest.TestCase):
             pcapng_file = PcapNGFile.PcapNGFile(self.tmp_fp)
             pcapng_file.read_pkt()
 
+    def test_read_pkt_new_version(self):
+        new_versions = (bytes([0x00, 0x02, 0x00, 0x00]),
+                        bytes([0x00, 0x01, 0x00, 0x01]),
+                        bytes([0x00, 0x01, 0x00, 0x99]))
+        for version in new_versions:
+            self.tmp_fp.seek(0)
+            # write block type
+            self.tmp_fp.write(bytes([0x0A, 0x0D, 0x0D, 0x0A]))
+            # write total length
+            self.tmp_fp.write(bytes([0, 0, 0, 28]))
+            # write byte order magic
+            self.tmp_fp.write(bytes([0x1A, 0x2B, 0x3C, 0x4D]))
+            # write version that is not supported
+            self.tmp_fp.write(version)
+            # write section length
+            self.tmp_fp.write(b'\xFF' * 8)
+            # write our block length again
+            self.tmp_fp.write(bytes([0, 0, 0, 28]))
+            # save and reset our file
+            self.tmp_fp.flush()
+            self.tmp_fp.seek(0)
+
+            errmsg = "Pcap NG format unsupported"
+            with self.assertRaisesRegex(PcapNGFile.PcapNGFileError, errmsg):
+                pcapng_file = PcapNGFile.PcapNGFile(self.tmp_fp)
+                pcapng_file.read_pkt()
+
 # TODO: confirm works with both byte orders (recognizes them)
+# TODO: options missing, options broken
 
 
 if __name__ == '__main__':
