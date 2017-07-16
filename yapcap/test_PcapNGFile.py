@@ -241,11 +241,10 @@ class TestPcapNGFile(unittest.TestCase):
         opt_buf = self._make_opt_buf(options)
         len_buf = self._write_shb_header(opt_buf)
         self.tmp_fp.write(opt_buf)
-        len_buf[0] = (len_buf[0] + 1) % 256
+        len_buf = bytes([(len_buf[0] + 1) % 256,]) + len_buf[1:]
         self.tmp_fp.write(len_buf)
         self.tmp_fp.flush()
         self.tmp_fp.seek(0)
-        sys.stdin.readline()
 
         errmsg = "section header block length not duplicated"
         with self.assertRaisesRegex(PcapNGFile.PcapNGFileError, errmsg):
