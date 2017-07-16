@@ -2,6 +2,9 @@
 Open and read Pcap-NG files.
 
 https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
+
+TODO: skip parsing options if not needed?
+TODO: a more liberal mode for parsing
 """
 import enum
 import struct
@@ -12,16 +15,14 @@ class PcapNGFileError(Exception):
 
 
 # generic option identifiers
-class OptOpt(enum.Enum):
-    endofopt = 0,
-    comment = 1,
+OPT_ENDOFOPT = 0
+OPT_COMMENT = 1
 
 
 # option identifiers for section header block
-class OptShb(enum.Enum):
-    hardware = 2,
-    os = 3,
-    userappl = 4,
+SHB_HARDWARE = 2
+SHB_OS = 3
+SHB_USERAPPL = 4
 
 # Section header block
 #
@@ -54,6 +55,13 @@ class PcapNGFile:
 
     def _parse_options(self, byte_order, opt_buf):
         options = {}
+
+        # If there is no option buffer (it is optional, after all), done.
+        if not opt_buf:
+            return options
+
+        # Otherwise go through and get each option.
+        found_end = False
         while opt_buf:
             if len(opt_buf) < 4:
                 raise PcapNGFileError("option too short")
@@ -63,14 +71,21 @@ class PcapNGFile:
             opt_val = opt_buf[4:4+opt_len]
             padded_opt_len = opt_len + ((4 - (opt_len % 4)) % 4)
             opt_buf = opt_buf[4+padded_opt_len:]
-            if opt_code == OptOpt.endofopt:
+            if opt_code == OPT_ENDOFOPT:
+                found_end = True
                 break
             if opt_code in options:
                 errmsg = "option %d appears twice in one block" % opt_code
                 raise PcapNGFileError(errmsg)
             options[opt_code] = opt_val
-        # XXX: what if our buffer is not empty now?
-        assert opt_buf == b''
+
+        # Check for a couple of error conditions after parsing the options.
+        if opt_buf:
+            raise PcapNGFileError("extra data in option section")
+        if not found_end:
+            raise PcapNGFileError("missing end of option marker")
+
+        # Finally, return our parsed options.
         return options
 
     def read_section_header_block(self):
