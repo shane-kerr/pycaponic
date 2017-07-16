@@ -3,7 +3,7 @@ Open and read Pcap-NG files.
 
 https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
 
-TODO: skip parsing options if not needed?
+TODO: skip parsing options if not needed
 TODO: a more liberal mode for parsing
 """
 import struct
@@ -11,6 +11,11 @@ import struct
 
 class PcapNGFileError(Exception):
     pass
+
+
+# block types
+BLK_TYPE_SHB = 0x0A0D0D0A
+BLK_TYPE_IF = 0x00000001
 
 
 # generic option identifiers
@@ -23,36 +28,33 @@ SHB_HARDWARE = 2
 SHB_OS = 3
 SHB_USERAPPL = 4
 
-# Section header block
-#
-#    0                   1                   2                   3
-#    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-#    +---------------------------------------------------------------+
-#  0 |                   Block Type = 0x0A0D0D0A                     |
-#    +---------------------------------------------------------------+
-#  4 |                      Block Total Length                       |
-#    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-#  8 |                      Byte-Order Magic                         |
-#    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-# 12 |          Major Version        |         Minor Version         |
-#    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-# 16 |                                                               |
-#    |                          Section Length                       |
-#    |                                                               |
-#    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-# 24 /                                                               /
-#    /                      Options (variable)                       /
-#    /                                                               /
-#    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-#    |                      Block Total Length                       |
-#    +---------------------------------------------------------------+
+
+# option identifiers for the interface description block
+IF_NAME = 2
+IF_DESCRIPTION = 3
+IF_IPv4ADDR = 4
+IF_IPv6ADDR = 5
+IF_MACADDR = 6
+IF_EUIADDR = 7
+IF_SPEED = 8
+IF_TSRESOL = 9
+IF_TZONE = 10
+IF_FILTER = 11
+IF_OS = 12
+IF_FCSLEN = 13
+IF_TSOFFSET = 14
+
+
+
+
 
 
 class PcapNGFile:
     def __init__(self, fp):
         self.file = fp
+        self.byte_order = None
 
-    def _parse_options(self, byte_order, opt_buf):
+    def _parse_options(self, opt_buf):
         options = {}
 
         # If there is no option buffer (it is optional, after all), done.
@@ -64,7 +66,8 @@ class PcapNGFile:
         while opt_buf:
             if len(opt_buf) < 4:
                 raise PcapNGFileError("option too short")
-            opt_code, opt_len = struct.unpack(byte_order+"HH", opt_buf[:4])
+            opt_code, opt_len = struct.unpack(self.byte_order+"HH",
+                                              opt_buf[:4])
             if len(opt_buf) < (4 + opt_len):
                 raise PcapNGFileError("option truncated")
             opt_val = opt_buf[4:4+opt_len]
@@ -87,6 +90,31 @@ class PcapNGFile:
         # Finally, return our parsed options.
         return options
 
+    # Section header block
+    #
+    #    0                   1                   2                   3
+    #    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    #    +---------------------------------------------------------------+
+    #  0 |                   Block Type = 0x0A0D0D0A                     |
+    #    +---------------------------------------------------------------+
+    #  4 |                      Block Total Length                       |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #  8 |                      Byte-Order Magic                         |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 12 |          Major Version        |         Minor Version         |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 16 |                                                               |
+    #    |                          Section Length                       |
+    #    |                                                               |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 24 /                                                               /
+    #    /                      Options (variable)                       /
+    #    /                                                               /
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #    |                      Block Total Length                       |
+    #    +---------------------------------------------------------------+
+    #
+    # TODO: refactor to separate reading & parsing
     def read_section_header_block(self):
         # This is a bit tricky since we don't know the byte order that
         # the length fields are in until after we read the byte-order
@@ -106,27 +134,27 @@ class PcapNGFile:
         byte_order_magic = buf[8:12]
         check_byte_order, = struct.unpack("<I", byte_order_magic)
         if check_byte_order == 0x1A2B3C4D:
-            byte_order = "<"
+            self.byte_order = "<"
         else:
             check_byte_order, = struct.unpack(">I", byte_order_magic)
             if check_byte_order == 0x1A2B3C4D:
-                byte_order = ">"
+                self.byte_order = ">"
             else:
                 err = "section header block bad byte order magic "
                 raise PcapNGFileError(err)
 
         # Get the total block length.
-        blk_total_len, = struct.unpack(byte_order+"I", buf[4:8])
+        blk_total_len, = struct.unpack(self.byte_order+"I", buf[4:8])
         if blk_total_len < 28:
             raise PcapNGFileError("section header block too short")
 
         # Check out version.
-        ver_maj, ver_min = struct.unpack(byte_order+"HH", buf[12:16])
+        ver_maj, ver_min = struct.unpack(self.byte_order+"HH", buf[12:16])
         if (ver_maj != 1) or (ver_min != 0):
             raise PcapNGFileError("Pcap NG format unsupported")
 
         # Grab our section length (-1 means "unspecified")
-        section_len, = struct.unpack(byte_order+"q", buf[16:24])
+        section_len, = struct.unpack(self.byte_order+"q", buf[16:24])
 
         # Now that we have a confirmed good total block length we can
         # read the rest of the section header block.
@@ -136,20 +164,67 @@ class PcapNGFile:
 
         # Look at the end of the section header block and check that the
         # total block length is replicated.
-        blk_total_len_check, = struct.unpack(byte_order+"I", buf[-4:])
+        blk_total_len_check, = struct.unpack(self.byte_order+"I", buf[-4:])
         if blk_total_len != blk_total_len_check:
             raise PcapNGFileError("section header block length not duplicated")
 
         # Finally we parse the options
-        options = self._parse_options(byte_order, buf[:len(buf)-4])
+        options = self._parse_options(buf[:-4])
 
         # Return what we found
-        return byte_order, section_len, options
+        return section_len, options
+
+    # Interface Description Block
+    #
+    #
+    #     0                   1                   2                   3
+    #     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    #    +---------------------------------------------------------------+
+    #  0 |                    Block Type = 0x00000001                    |
+    #    +---------------------------------------------------------------+
+    #  4 |                      Block Total Length                       |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #  8 |           LinkType            |           Reserved            |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 12 |                            SnapLen                            |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 16 /                                                               /
+    #    /                      Options (variable)                       /
+    #    /                                                               /
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #    |                      Block Total Length                       |
+    #    +---------------------------------------------------------------+
+    def _parse_if_block(self, buf):
+        pass
+
+    def _read_block(self):
+        """
+        Read a generic block.
+        """
+        # Read the block type and block length.
+        buf = self.file.read(8)
+        if len(buf) != 8:
+            raise PcapNGFileError("block missing header")
+        blk_type, blk_len = struct.unpack(self.byte_order+"II", buf)
+
+        # Read the rest of the block, based on block length.
+        buf = self.file.read(blk_len - 8)
+        if len(buf) != blk_len - 8:
+            raise PcapNGFileError("block truncated")
+
+        # Check the final block length value.
+        blk_len_check, = struct.unpack(self.byte_order+"I", buf[-4:])
+        if blk_len != blk_len_check:
+            raise PcapNGFileError("block length not duplicated")
+
+        # Return the block information
+        return blk_type, buf[:-4]
 
     def read_pkt(self):
         # We start off reading the section header block.
-        byte_order, section_len, section_opt = self.read_section_header_block()
-
+        section_len, section_opt = self.read_section_header_block()
+        # Read next packet (which must be Interface Description Block)
+        blk_type, buf = self._read_block()
 
 if __name__ == '__main__':
     with open('delme.pcap', 'rb') as my_fp:
