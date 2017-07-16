@@ -6,7 +6,6 @@ https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
 TODO: skip parsing options if not needed?
 TODO: a more liberal mode for parsing
 """
-import enum
 import struct
 
 
