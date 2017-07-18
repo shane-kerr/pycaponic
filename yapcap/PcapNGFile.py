@@ -189,6 +189,16 @@ class PcapNGFile:
         self.file = fp
         self.byte_order = None
 
+        # We start off reading the section header block.
+        blk_type, buf = self._read_block()
+        if blk_type != BLK_TYPE_SHB:
+            raise PcapNGFileError("first block must be a Section Header Block")
+        shb_opt, section_len = self._parse_section_header_block(buf)
+
+        # Set our various block information.
+        self.shb_opt, self.section_len = shb_opt, section_len
+        self.if_opt, self.if_linktype, self.if_snaplen = None, None, None
+
     def _parse_options(self, opt_buf, checks):
         options = {}
 
@@ -291,65 +301,23 @@ class PcapNGFile:
     #    |                      Block Total Length                       |
     #    +---------------------------------------------------------------+
     #
-    # TODO: refactor to separate reading & parsing
-    def read_section_header_block(self):
-        # This is a bit tricky since we don't know the byte order that
-        # the length fields are in until after we read the byte-order
-        # magic.
+    def _parse_section_header_block(self, buf):
+        # The byte order should have been checked in _read_block().
 
-        # Read the required fixed length of the section header block.
-        buf = self.file.read(24)
-        if len(buf) != 24:
-            raise PcapNGFileError("section header block missing header")
-
-        # Verify that we start with the correct block type.
-        blk_type = buf[0:4]
-        if blk_type != bytes([0x0A, 0x0D, 0x0D, 0x0A]):
-            raise PcapNGFileError("section header block bad type")
-
-        # Figure out our byte ordering based on the byte order magic number.
-        byte_order_magic = buf[8:12]
-        check_byte_order, = struct.unpack("<I", byte_order_magic)
-        if check_byte_order == 0x1A2B3C4D:
-            self.byte_order = "<"
-        else:
-            check_byte_order, = struct.unpack(">I", byte_order_magic)
-            if check_byte_order == 0x1A2B3C4D:
-                self.byte_order = ">"
-            else:
-                err = "section header block bad byte order magic "
-                raise PcapNGFileError(err)
-
-        # Get the total block length.
-        blk_total_len, = struct.unpack(self.byte_order+"I", buf[4:8])
-        if blk_total_len < 28:
+        # Verify our buffer is long enough.
+        if len(buf) < 16:
             raise PcapNGFileError("section header block too short")
-        if (blk_total_len % 4) != 0:
-            msg = "section header block length not multiple of 4"
-            raise PcapNGFileError(msg)
 
         # Check out version.
-        ver_maj, ver_min = struct.unpack(self.byte_order+"HH", buf[12:16])
+        ver_maj, ver_min = struct.unpack(self.byte_order+"HH", buf[4:8])
         if (ver_maj != 1) or (ver_min != 0):
             raise PcapNGFileError("Pcap NG format unsupported")
 
         # Grab our section length (-1 means "unspecified")
-        section_len, = struct.unpack(self.byte_order+"q", buf[16:24])
+        section_len, = struct.unpack(self.byte_order+"q", buf[8:16])
 
-        # Now that we have a confirmed good total block length we can
-        # read the rest of the section header block.
-        buf = self.file.read(blk_total_len - 24)
-        if len(buf) != (blk_total_len - 24):
-            raise PcapNGFileError("section header block truncated")
-
-        # Look at the end of the section header block and check that the
-        # total block length is replicated.
-        blk_total_len_check, = struct.unpack(self.byte_order+"I", buf[-4:])
-        if blk_total_len != blk_total_len_check:
-            raise PcapNGFileError("section header block length not duplicated")
-
-        # Finally we parse the options
-        options = self._parse_options(buf[:-4], OPTION_CHECKS_SHB)
+        # Parse the options
+        options = self._parse_options(buf[16:-4], OPTION_CHECKS_SHB)
 
         # Return what we found
         return options, section_len
@@ -388,18 +356,42 @@ class PcapNGFile:
 
     def _read_block(self):
         """
-        Read a generic block.
+        Read a block.
         """
         # Read the block type and block length.
-        buf = self.file.read(8)
-        if len(buf) != 8:
+        header_buf = self.file.read(8)
+
+        # Handle EOF
+        if len(header_buf) == 0:
+            raise EOFError()
+
+        if len(header_buf) != 8:
             raise PcapNGFileError("block missing header")
-        blk_type, blk_len = struct.unpack(self.byte_order+"II", buf)
+
+        # Handle the special case of section header block, which includes
+        # the byte order magic.
+        if header_buf[0:4] == bytes([0x0A, 0x0D, 0x0D, 0x0A]):
+            byte_order_magic = self.file.read(4)
+            check_byte_order, = struct.unpack("<I", byte_order_magic)
+            if check_byte_order == 0x1A2B3C4D:
+                self.byte_order = "<"
+            else:
+                check_byte_order, = struct.unpack(">I", byte_order_magic)
+                if check_byte_order == 0x1A2B3C4D:
+                    self.byte_order = ">"
+                else:
+                    err = "section header block bad byte order magic "
+                    raise PcapNGFileError(err)
+            buf = byte_order_magic
+        else:
+            buf = b''
+
+        blk_type, blk_len = struct.unpack(self.byte_order+"II", header_buf)
         if (blk_len % 4) != 0:
             raise PcapNGFileError("block length not multiple of 4")
 
         # Read the rest of the block, based on block length.
-        buf = self.file.read(blk_len - 8)
+        buf += self.file.read(blk_len - len(buf) - 8)
         if len(buf) != blk_len - 8:
             raise PcapNGFileError("block truncated")
 
@@ -412,16 +404,23 @@ class PcapNGFile:
         return blk_type, buf[:-4]
 
     def read_pkt(self):
-        # We start off reading the section header block.
-        section_opt, section_len = self.read_section_header_block()
-        print(section_opt)
-        # Read next packet (which must be Interface Description Block)
-        blk_type, buf = self._read_block()
-        if_opt, if_linktype, if_snaplen = self._parse_if_block(buf)
-        print(if_opt)
+        while True:
+            blk_type, buf = self._read_block()
+            if blk_type == BLK_TYPE_SHB:
+                (self.shb_opt,
+                 self.section_len) = self._parse_section_header_block(buf)
+                print(self.shb_opt)
+            elif blk_type == BLK_TYPE_IF:
+                (self.if_opt,
+                 self.if_linktype,
+                 self.if_snaplen) = self._parse_if_block(buf)
+                print(self.if_opt)
+            else:
+                return blk_type, buf
 
 
 if __name__ == '__main__':
     with open('delme.pcap', 'rb') as my_fp:
         pcapf = PcapNGFile(my_fp)
-        pcapf.read_pkt()
+        blk_type, buf = pcapf.read_pkt()
+        print(blk_type)
