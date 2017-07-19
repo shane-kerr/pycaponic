@@ -568,7 +568,7 @@ class PcapNGFile:
         header_buf = self.file.read(8)
 
         # Handle EOF
-        if header_buf == '':
+        if header_buf == b'':
             raise EOFError()
 
         if len(header_buf) != 8:
