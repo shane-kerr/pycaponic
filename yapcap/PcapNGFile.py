@@ -9,17 +9,25 @@ TODO: skip parsing options if not needed
 TODO: a more liberal mode for parsing
 """
 import collections
+import decimal
 import ipaddress
+import math
 import struct
+import time
 
 
 class PcapNGFileError(Exception):
     pass
 
 
+# default time resolution
+DEFAULT_TS_RESOL = decimal.Decimal(1000000)
+
+
 # block types
 BLK_TYPE_SHB = 0x0A0D0D0A
 BLK_TYPE_IF = 0x00000001
+BLK_TYPE_EPB = 0x00000006
 
 
 # generic option identifiers
@@ -48,6 +56,12 @@ IF_FILTER = 11
 IF_OS = 12
 IF_FCSLEN = 13
 IF_TSOFFSET = 14
+
+
+# option identifiers for the enhanced packet block
+EPB_FLAGS = 2
+EPB_HASH = 3
+EPB_DROPCOUNT = 4
 
 
 def opt_str(buf, _):
@@ -111,7 +125,7 @@ def opt_tsresol(buf, _):
         opt_val = 2 ** (tsresol & 0x7F)
     else:
         opt_val = 10 ** tsresol
-    return opt_val
+    return decimal.Decimal(opt_val)
 
 
 FilterInfo = collections.namedtuple('FilterInfo', ['code', 'info'])
@@ -124,6 +138,106 @@ def opt_filter(buf, _):
     if len(buf) < 1:
         raise PcapNGFileError("if_filter must be at least 1 byte")
     return FilterInfo(code=buf[0], info=buf[1:])
+
+
+EPB_Flags = collections.namedtuple('EPB_Flags',
+                                   ['in_out_pkt',
+                                    'reception',
+                                    'fcs_len',
+                                    'link_errors'])
+
+
+def opt_epb_flags(buf, byte_order):
+    """
+    Decode the enhanced packet block flags.
+    """
+    opt_val, = struct.unpack(byte_order+"I", buf)
+
+    in_out_pkt_val = opt_val & 0b11
+    if in_out_pkt_val == 0:
+        in_out_pkt = "information not available"
+    elif in_out_pkt_val == 1:
+        in_out_pkt = "inbound"
+    elif in_out_pkt_val == 2:
+        in_out_pkt = "outbound"
+    else:
+        raise PcapNGFileError("invalid I/O packet in EPB flags")
+
+    reception_val = (opt_val >> 2) & 0b111
+    if reception_val == 0:
+        reception_type = "not specified"
+    elif reception_val == 1:
+        reception_type = "unicast"
+    elif reception_val == 2:
+        reception_type = "multicast"
+    elif reception_val == 3:
+        reception_type = "broadcast"
+    elif reception_val == 4:
+        reception_type = "promiscuous"
+    else:
+        raise PcapNGFileError("invalid reception type in EPB flags")
+
+    fcs_len = (opt_val >> 5) & 0b1111
+    if fcs_len == 0:
+        fcs_len = None
+
+    reserved = (opt_val >> 9) & 0b1111111
+    if reserved != 0:
+        raise PcapNGFileError("reserved bits set in EPB flags")
+
+    errors = []
+    if opt_val & 0b10000000000000000000000000000000:
+        errors.append("symbol")
+    if opt_val & 0b01000000000000000000000000000000:
+        errors.append("preamble")
+    if opt_val & 0b00100000000000000000000000000000:
+        errors.append("start frame delimiter")
+    if opt_val & 0b00010000000000000000000000000000:
+        errors.append("unaligned frame")
+    if opt_val & 0b00001000000000000000000000000000:
+        errors.append("wrong inter-frame gap")
+    if opt_val & 0b00000100000000000000000000000000:
+        errors.append("packet too short")
+    if opt_val & 0b00000010000000000000000000000000:
+        errors.append("CRC")
+
+    return EPB_Flags(in_out_pkt=in_out_pkt,
+                     reception=reception_type,
+                     fcs_len=fcs_len,
+                     link_errors=errors)
+
+
+HashInfo = collections.namedtuple('HashInfo', ['algorithm', 'value'])
+
+
+def opt_epb_hash(buf, _):
+    """
+    Decode the enhanced packet block flags.
+    """
+    if len(buf) < 1:
+        raise PcapNGFileError("epb_hash must be at least 1 byte")
+    alg_code = buf[0]
+    hash_val = buf[1:]
+    if alg_code == 0:
+        alg = "2s complement"
+    elif alg_code == 1:
+        alg = "XOR"
+    elif alg_code == 2:
+        if len(hash_val) != 4:
+            raise PcapNGFileError("epb_hash CRC32 must be 4 bytes")
+        alg = "CRC32"
+    elif alg_code == 3:
+        if len(hash_val) != 16:
+            raise PcapNGFileError("epb_hash MD5 must be 16 bytes")
+        alg = "MD5"
+    elif alg_code == 4:
+        if len(hash_val) != 20:
+            raise PcapNGFileError("epb_hash SHA-1 must be 20 bytes")
+        alg = "SHA-1"
+    else:
+        alg = str(alg_code)
+
+    return HashInfo(algorithm=alg, value=hash_val)
 
 
 # Tuple containing directives to check options
@@ -183,21 +297,40 @@ OPTION_CHECKS_IF = {
                              opt_len=8, opt_max_occur=1, opt_fn=opt_uint64),
 }
 
+OPTION_CHECKS_EPB = {
+    EPB_FLAGS: OptionCheck(opt_name='epb_flags',
+                           opt_len=4, opt_max_occur=1, opt_fn=opt_epb_flags),
+    EPB_HASH: OptionCheck(opt_name='epb_hash',
+                          opt_len=None, opt_max_occur=1, opt_fn=opt_epb_hash),
+    EPB_DROPCOUNT: OptionCheck(opt_name='epb_dropcount',
+                               opt_len=None,
+                               opt_max_occur=1,
+                               opt_fn=opt_uint64),
+}
+
+SectionHeaderBlock = collections.namedtuple('SectionHeaderBlock',
+                                            ['section_len', 'options'])
+
+InterfaceDescriptionBlock = collections.namedtuple('InterfaceDescriptionBlock',
+                                                   ['linktype',
+                                                    'snaplen',
+                                                    'options', ])
+
 
 class PcapNGFile:
     def __init__(self, fp):
         self.file = fp
-        self.byte_order = None
+        self.byte_order = ''
 
         # We start off reading the section header block.
         blk_type, buf = self._read_block()
         if blk_type != BLK_TYPE_SHB:
             raise PcapNGFileError("first block must be a Section Header Block")
-        shb_opt, section_len = self._parse_section_header_block(buf)
+        shb = self._parse_section_header_block(buf)
 
         # Set our various block information.
-        self.shb_opt, self.section_len = shb_opt, section_len
-        self.if_opt, self.if_linktype, self.if_snaplen = None, None, None
+        self.shb = shb
+        self.if_descr = []
 
     def _parse_options(self, opt_buf, checks):
         options = {}
@@ -207,6 +340,7 @@ class PcapNGFile:
             return options
 
         # Otherwise go through and get each option.
+        found_end = False
         while opt_buf:
             # verify we have option code & length at least
             if len(opt_buf) < 4:
@@ -242,6 +376,7 @@ class PcapNGFile:
 
             # if we have our end option, we are done
             if opt_code == OPT_ENDOFOPT:
+                found_end = True
                 break
 
             # get existing option value, if any
@@ -270,9 +405,8 @@ class PcapNGFile:
         # Check for a couple of error conditions after parsing the options.
         if opt_buf:
             raise PcapNGFileError("extra data in option section")
-
-        # We used to test to make sure that we had an opt_endofopt option,
-        # but this is not present in every block generated by tshark.
+        if not found_end:
+            raise PcapNGFileError("missing opt_endofopt option")
 
         # Finally, return our parsed options.
         return options
@@ -317,10 +451,10 @@ class PcapNGFile:
         section_len, = struct.unpack(self.byte_order+"q", buf[8:16])
 
         # Parse the options
-        options = self._parse_options(buf[16:-4], OPTION_CHECKS_SHB)
+        options = self._parse_options(buf[16:], OPTION_CHECKS_SHB)
 
         # Return what we found
-        return options, section_len
+        return SectionHeaderBlock(section_len=section_len, options=options)
 
     # Interface Description Block
     #
@@ -351,8 +485,72 @@ class PcapNGFile:
             raise PcapNGFileError("interface description block too short")
         linktype, = struct.unpack(self.byte_order+"H", buf[:2])
         snaplen, = struct.unpack(self.byte_order+"I", buf[4:8])
-        options = self._parse_options(buf[8:-4], OPTION_CHECKS_IF)
-        return options, linktype, snaplen
+        options = self._parse_options(buf[8:], OPTION_CHECKS_IF)
+        return InterfaceDescriptionBlock(linktype=linktype,
+                                         snaplen=snaplen,
+                                         options=options)
+
+    #    0                   1                   2                   3
+    #    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    #    +---------------------------------------------------------------+
+    #  0 |                    Block Type = 0x00000006                    |
+    #    +---------------------------------------------------------------+
+    #  4 |                      Block Total Length                       |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #  8 |                         Interface ID                          |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 12 |                        Timestamp (High)                       |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 16 |                        Timestamp (Low)                        |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 20 |                    Captured Packet Length                     |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 24 |                    Original Packet Length                     |
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    # 28 /                                                               /
+    #    /                          Packet Data                          /
+    #    /              variable length, padded to 32 bits               /
+    #    /                                                               /
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #    /                                                               /
+    #    /                      Options (variable)                       /
+    #    /                                                               /
+    #    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    #    |                      Block Total Length                       |
+    #    +---------------------------------------------------------------+
+    def _parse_epb_block(self, buf):
+        """
+        Parse the Enhance Packet Block buffer without the block type
+        and block total length values.
+        """
+        if len(buf) < 20:
+            raise PcapNGFileError("enhanced packet block too short")
+        (interface_id,
+         timestamp_hi, timestamp_lo,
+         capture_len, original_len) = struct.unpack(self.byte_order+"IIIII",
+                                                    buf[:20])
+        if interface_id > len(self.if_descr):
+            raise PcapNGFileError("invalid interface identifier")
+        if capture_len > original_len:
+            raise PcapNGFileError("capture length too big")
+
+        # figure out the time
+        if_descr_opt = self.if_descr[interface_id].options
+        if_ts_resol = if_descr_opt.get("if_tsresol", DEFAULT_TS_RESOL)
+        timestamp = (timestamp_hi << 32) + timestamp_lo
+        pkt_time = decimal.Decimal(timestamp) / decimal.Decimal(if_ts_resol)
+        print(time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(pkt_time)) +
+              str(pkt_time - math.floor(pkt_time))[1:])
+
+        pkt_data = buf[20:20+capture_len]
+        if len(pkt_data) != capture_len:
+            raise PcapNGFileError("enhanced packet block missing packet data")
+
+        padded_capture_len = capture_len + ((4 - (capture_len % 4)) % 4)
+        options = self._parse_options(buf[20+padded_capture_len:],
+                                      OPTION_CHECKS_EPB)
+        return (options, interface_id, pkt_time,
+                capture_len, original_len, pkt_data)
 
     def _read_block(self):
         """
@@ -407,14 +605,24 @@ class PcapNGFile:
         while True:
             blk_type, buf = self._read_block()
             if blk_type == BLK_TYPE_SHB:
-                (self.shb_opt,
-                 self.section_len) = self._parse_section_header_block(buf)
-                print(self.shb_opt)
+                self.shb = self._parse_section_header_block(buf)
+                # reset the list of interfaces for each section
+                self.if_descr = []
             elif blk_type == BLK_TYPE_IF:
-                (self.if_opt,
-                 self.if_linktype,
-                 self.if_snaplen) = self._parse_if_block(buf)
-                print(self.if_opt)
+                self.if_descr.append(self._parse_if_block(buf))
+            elif blk_type == BLK_TYPE_EPB:
+                (pkt_options,
+                 pkt_interface_id,
+                 pkt_timestamp,
+                 pkt_capture_len,
+                 pkt_original_len,
+                 pkt_data) = self._parse_epb_block(buf)
+                print(pkt_options)
+                print(pkt_interface_id)
+                print(pkt_timestamp)
+                print(pkt_capture_len)
+                print(pkt_original_len)
+                return blk_type
             else:
                 return blk_type, buf
 
@@ -422,5 +630,9 @@ class PcapNGFile:
 if __name__ == '__main__':
     with open('delme.pcap', 'rb') as my_fp:
         pcapf = PcapNGFile(my_fp)
-        blk_type, buf = pcapf.read_pkt()
-        print(blk_type)
+        print(pcapf.shb)
+        pcapf.read_pkt()
+        pcapf.read_pkt()
+        pcapf.read_pkt()
+        pcapf.read_pkt()
+        pcapf.read_pkt()
