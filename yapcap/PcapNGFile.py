@@ -11,9 +11,7 @@ TODO: a more liberal mode for parsing
 import collections
 import decimal
 import ipaddress
-import math
 import struct
-import time
 
 
 class PcapNGFileError(Exception):
@@ -140,11 +138,11 @@ def opt_filter(buf, _):
     return FilterInfo(code=buf[0], info=buf[1:])
 
 
-EPB_Flags = collections.namedtuple('EPB_Flags',
-                                   ['in_out_pkt',
-                                    'reception',
-                                    'fcs_len',
-                                    'link_errors'])
+EPBflags = collections.namedtuple('EPBflags',
+                                  ['in_out_pkt',
+                                   'reception',
+                                   'fcs_len',
+                                   'link_errors'])
 
 
 def opt_epb_flags(buf, byte_order):
@@ -201,10 +199,10 @@ def opt_epb_flags(buf, byte_order):
     if opt_val & 0b00000010000000000000000000000000:
         errors.append("CRC")
 
-    return EPB_Flags(in_out_pkt=in_out_pkt,
-                     reception=reception_type,
-                     fcs_len=fcs_len,
-                     link_errors=errors)
+    return EPBflags(in_out_pkt=in_out_pkt,
+                    reception=reception_type,
+                    fcs_len=fcs_len,
+                    link_errors=errors)
 
 
 HashInfo = collections.namedtuple('HashInfo', ['algorithm', 'value'])
@@ -315,6 +313,14 @@ InterfaceDescriptionBlock = collections.namedtuple('InterfaceDescriptionBlock',
                                                    ['linktype',
                                                     'snaplen',
                                                     'options', ])
+
+EnhancedPacketBlock = collections.namedtuple('EnhancedPacketBlock',
+                                             ['interface_id',
+                                              'timestamp',
+                                              'capture_len',
+                                              'original_len',
+                                              'pkt_data',
+                                              'options', ])
 
 
 class PcapNGFile:
@@ -535,12 +541,10 @@ class PcapNGFile:
             raise PcapNGFileError("capture length too big")
 
         # figure out the time
-        if_descr_opt = self.if_descr[interface_id].options
-        if_ts_resol = if_descr_opt.get("if_tsresol", DEFAULT_TS_RESOL)
+        if_descr = self.if_descr[interface_id]
+        if_ts_resol = if_descr.options.get("if_tsresol", DEFAULT_TS_RESOL)
         timestamp = (timestamp_hi << 32) + timestamp_lo
         pkt_time = decimal.Decimal(timestamp) / decimal.Decimal(if_ts_resol)
-        print(time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(pkt_time)) +
-              str(pkt_time - math.floor(pkt_time))[1:])
 
         pkt_data = buf[20:20+capture_len]
         if len(pkt_data) != capture_len:
@@ -549,8 +553,12 @@ class PcapNGFile:
         padded_capture_len = capture_len + ((4 - (capture_len % 4)) % 4)
         options = self._parse_options(buf[20+padded_capture_len:],
                                       OPTION_CHECKS_EPB)
-        return (options, interface_id, pkt_time,
-                capture_len, original_len, pkt_data)
+        return EnhancedPacketBlock(interface_id=interface_id,
+                                   timestamp=pkt_time,
+                                   capture_len=capture_len,
+                                   original_len=original_len,
+                                   pkt_data=pkt_data,
+                                   options=options)
 
     def _read_block(self):
         """
@@ -560,7 +568,7 @@ class PcapNGFile:
         header_buf = self.file.read(8)
 
         # Handle EOF
-        if len(header_buf) == 0:
+        if header_buf == '':
             raise EOFError()
 
         if len(header_buf) != 8:
@@ -611,28 +619,20 @@ class PcapNGFile:
             elif blk_type == BLK_TYPE_IF:
                 self.if_descr.append(self._parse_if_block(buf))
             elif blk_type == BLK_TYPE_EPB:
-                (pkt_options,
-                 pkt_interface_id,
-                 pkt_timestamp,
-                 pkt_capture_len,
-                 pkt_original_len,
-                 pkt_data) = self._parse_epb_block(buf)
-                print(pkt_options)
-                print(pkt_interface_id)
-                print(pkt_timestamp)
-                print(pkt_capture_len)
-                print(pkt_original_len)
-                return blk_type
+                epb = self._parse_epb_block(buf)
+                return epb, self.if_descr[epb.interface_id], self.shb
+            # TODO: simple packet
             else:
-                return blk_type, buf
+                # XXX: if we had a warning mechanism we could warn here
+                pass
 
 
 if __name__ == '__main__':
     with open('delme.pcap', 'rb') as my_fp:
         pcapf = PcapNGFile(my_fp)
         print(pcapf.shb)
-        pcapf.read_pkt()
-        pcapf.read_pkt()
-        pcapf.read_pkt()
-        pcapf.read_pkt()
-        pcapf.read_pkt()
+        try:
+            while True:
+                print(pcapf.read_pkt())
+        except EOFError:
+            pass
