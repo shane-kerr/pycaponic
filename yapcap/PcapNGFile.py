@@ -5,6 +5,7 @@ https://pcapng.github.io/pcapng/
 
 https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
 
+TODO: generator mode
 TODO: skip parsing options if not needed
 TODO: a more liberal mode for parsing
 """
@@ -451,7 +452,7 @@ class PcapNGFile:
         # Check out version.
         ver_maj, ver_min = struct.unpack(self.byte_order+"HH", buf[4:8])
         if (ver_maj != 1) or (ver_min != 0):
-            raise PcapNGFileError("Pcap NG format unsupported")
+            raise PcapNGFileError("Pcap NG version unsupported")
 
         # Grab our section length (-1 means "unspecified")
         section_len, = struct.unpack(self.byte_order+"q", buf[8:16])
