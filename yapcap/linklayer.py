@@ -16,13 +16,13 @@ LINKTYPE_LOOP = 108
 LINKTYPE_IPV4 = 228
 LINKTYPE_IPV6 = 229
 
-class LinkTypeError(Exception):
+class LinkLayerError(Exception):
     pass
 
 
 def decode_null(byte_order, link_pkt):
     if len(link_pkt) < 4:
-        raise LinkTypeError("BSD loopback packet too small")
+        raise LinkLayerError("BSD loopback packet too small")
     ethertype, = struct.unpack(byte_order+"I", link_pkt[0:4])
     if ethertype == 2:
         pkt_type = "IPv4"
@@ -33,14 +33,14 @@ def decode_null(byte_order, link_pkt):
     elif ethertype == 23:
         pkt_type = "IPX"
     else:
-        raise LinkTypeError("unknown type of BSD loopback packet")
+        raise LinkLayerError("unknown type of BSD loopback packet")
     payload = link_pkt[4:]
     return payload, pkt_type, {}
 
 
 def decode_ethernet(_, link_pkt):
     if len(link_pkt) < 14:
-        raise LinkTypeError("Ethernet packet too small")
+        raise LinkLayerError("Ethernet packet too small")
     mac_dst = ":".join((("%02x" % n) for n in link_pkt[0:6]))
     mac_src = ":".join((("%02x" % n) for n in link_pkt[6:12]))
     ethertype, = struct.unpack("!H", link_pkt[12:14])
@@ -50,20 +50,20 @@ def decode_ethernet(_, link_pkt):
     elif ethertype == ETHERTYPE_IPv6:
         pkt_type = "IPv6"
     else:
-        raise LinkTypeError("unknown type of Ethernet packet")
+        raise LinkLayerError("unknown type of Ethernet packet")
     info = { "mac_dst": mac_dst, "mac_src": mac_src, }
     return payload, pkt_type, info
 
 def decode_raw(_, link_pkt):
     if len(link_pkt) < 1:
-        raise LinkTypeError("raw packet too small")
+        raise LinkLayerError("raw packet too small")
     ip_ver = (link_pkt[0] >> 4) & 0b1111
     if ip_ver == 6:
         pkt_type = "IPv6"
     elif ip_ver == 4:
         pkt_type = "IPv4"
     else:
-        raise LinkTypeError("raw packet not IPv4 or IPv6")
+        raise LinkLayerError("raw packet not IPv4 or IPv6")
     return payload, pkt_type, {}
 
 def decode_loop(_, link_pkt):
@@ -84,3 +84,14 @@ LINK_DECODERS = {
     LINKTYPE_IPV6: decode_ipv6,
 }
 
+
+class Decoder:
+    def __init__(self, link_type, byte_order):
+        decoder = LINK_DECODERS.get(link_type)
+        if not decoder:
+            raise LinkLayerError("unknown link type")
+        self.decoder = decoder
+        self.byte_order = byte_order
+
+    def decode(self, pkt):
+        return self.decoder(self.byte_order, pkt)
