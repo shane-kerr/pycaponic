@@ -1,8 +1,10 @@
 """
 Open and read Pcap-NG files.
 
+
 https://pcapng.github.io/pcapng/
 
+https://github.com/pcapng/pcapng
 https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
 
 TODO: generator mode
