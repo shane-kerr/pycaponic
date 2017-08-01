@@ -86,8 +86,8 @@ will also have the source and destination MAC address of the packet:
 
 | Name        | Description |
 |-------------|-------------|
-| `src_mac`   | The source MAC address of the packet, as a string like `"70:85:c2:3b:e8:f0"` |
-| `dst_mac`   | The destination MAC address of the packet, as a string like `"00:01:2e:78:08:b1"` |
+| `src_mac`   | The source MAC address of the packet, as a string like `"70-85-C2-3B-E8-F0"` |
+| `dst_mac`   | The destination MAC address of the packet, as a string like `"00-01-2E-78-08-B1"` |
 
 The full list of link-layer header types can be found here:
 
@@ -129,12 +129,29 @@ PcapNG file:
 
 | Name        | Description |
 |-------------|-------------|
-| `shb_comment`  | Comment from the section header block |
-| `shb_hardware` | Hardware of the machine that wrote the capture |
-| `shb_os`       | OS of the machine that wrote the capture, like "Linux 4.11.0" |
-| `shb_userappl` | Application that wrote the capture, like "Dumpcap 1.12.1" |
-| `if_comment`   | Comment from the interface block |
-| `if_name`      | Name of the interface, like "eth0" |
+| `shb_comment`    | Comment from the section header block |
+| `shb_hardware`   | Hardware of the machine that wrote the capture |
+| `shb_os`         | OS of the machine that wrote the capture, like `"Linux 4.11.0"` |
+| `shb_userappl`   | Application that wrote the capture, like `"Dumpcap 1.12.1"` |
+| `if_comment`     | Comment from the interface block |
+| `if_name`        | Name of the interface, like `"eth0"` |
+| `if_description` | Description of the interface, like `"WAN"` or `"VPN"` |
+| `if_IPv4addr`    | List of IPv4 addresses, like `[ '192.0.2.1', '192.0.2.11', ...]` |
+| `if_IPv6addr`    | List of IPv6 addresses, like `[ '::1', '2001:470:1::73', ...]` |
+| `if_MACaddr`     | The MAC address of the interface, like `"70-85-C2-3B-E8-F0"` |
+| `if_EUIaddr`     | The EUI address of the interface, like `"00-01-2E-78-08-B1-01-FC"` |
+| `if_speed`       | Speed of the interface in bits per second |
+| `if_tsresol`     | Resolution of timestamps (1000 means msec, 1000000 means usec, and so on) |
+| `if_tzone`       | _Time zone offset? (This is not well-specified.)_ |
+| `if_filter`      | Filter type and string, like `(0, "host 192.0.2.11 and port 53")`
+| `if_os`          | OS of the machine that has the interface, like `"Windows 8"` |
+| `if_fcslen`      | Length of Frame Check Sequence for this interface, in bits |
+| `if_tsoffset`    | Timestamp offset in seconds |
+| `epb_flags`      | Packet flags (see below for details) |
+| `epb_hash`       | Hash type and value, like `("CRC32", b'\x80\x1f\xc8\x18')` |
+| `epb_dropcount`  | Count of packets dropped since last packet captured |
+
+The `epb_flags` has the following possible values
 
 TODO: finish the descriptions, document how to read blocks directly...
 
