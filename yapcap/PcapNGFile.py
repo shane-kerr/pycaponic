@@ -7,6 +7,10 @@ https://pcapng.github.io/pcapng/
 https://github.com/pcapng/pcapng
 https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
 
+TODO: MAC address formatting (70-85-C2-3B-E8-F0)
+      https://standards.ieee.org/develop/regauth/tut/eui48.pdf
+TODO: EUI address formatting (70-85-C2-01-F3-3B-E8-F0)
+      https://standards.ieee.org/develop/regauth/tut/eui64.pdf
 TODO: generator mode
 TODO: skip parsing options if not needed
 TODO: a more liberal mode for parsing
@@ -106,11 +110,27 @@ def opt_ipv6(buf, _):
     return opt_val
 
 
+def opt_int32(buf, byte_order):
+    """
+    Convert to a signed 32-bit integer.
+    """
+    opt_val, = struct.unpack(byte_order+"i", buf)
+    return opt_val
+
+
+def opt_int64(buf, byte_order):
+    """
+    Convert to a signed 64-bit integer.
+    """
+    opt_val, = struct.unpack(byte_order+"q", buf)
+    return opt_val
+
+
 def opt_uint64(buf, byte_order):
     """
     Convert to an unsigned 64-bit integer.
     """
-    opt_val, = struct.unpack(byte_order+"I", buf)
+    opt_val, = struct.unpack(byte_order+"Q", buf)
     return opt_val
 
 
@@ -287,7 +307,7 @@ OPTION_CHECKS_IF = {
     IF_TSRESOL: OptionCheck(opt_name='if_tsresol',
                             opt_len=1, opt_max_occur=1, opt_fn=opt_tsresol),
     IF_TZONE: OptionCheck(opt_name='if_tzone',
-                          opt_len=4, opt_max_occur=1, opt_fn=None),
+                          opt_len=4, opt_max_occur=1, opt_fn=opt_int32),
     IF_FILTER: OptionCheck(opt_name='if_filter',
                            opt_len=None, opt_max_occur=1, opt_fn=opt_filter),
     IF_OS: OptionCheck(opt_name='if_os',
@@ -295,7 +315,7 @@ OPTION_CHECKS_IF = {
     IF_FCSLEN: OptionCheck(opt_name='if_fcslen',
                            opt_len=1, opt_max_occur=1, opt_fn=None),
     IF_TSOFFSET: OptionCheck(opt_name='if_tsoffset',
-                             opt_len=8, opt_max_occur=1, opt_fn=opt_uint64),
+                             opt_len=8, opt_max_occur=1, opt_fn=opt_int64),
 }
 
 OPTION_CHECKS_EPB = {
@@ -636,6 +656,8 @@ if __name__ == '__main__':
         print(pcapf.shb)
         try:
             while True:
-                print(pcapf.read_pkt())
+                result = pcapf.read_pkt()
+                pkt_data = result[0].pkt_data
+                print(result)
         except EOFError:
             pass
