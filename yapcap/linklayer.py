@@ -41,8 +41,8 @@ def decode_null(byte_order, link_pkt):
 def decode_ethernet(_, link_pkt):
     if len(link_pkt) < 14:
         raise LinkLayerError("Ethernet packet too small")
-    mac_dst = ":".join((("%02x" % n) for n in link_pkt[0:6]))
-    mac_src = ":".join((("%02x" % n) for n in link_pkt[6:12]))
+    mac_dst = "%02X-%02X-%02X-%02X-%02X-%02X" % tuple(link_pkt[0:6])
+    mac_src = "%02X-%02X-%02X-%02X-%02X-%02X" % tuple(link_pkt[6:12])
     ethertype, = struct.unpack("!H", link_pkt[12:14])
     payload = link_pkt[14:]
     if ethertype == ETHERTYPE_IPv4:
