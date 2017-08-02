@@ -101,7 +101,7 @@ header types.
 
 pcap files can be read directly using the PcapFile class. You will
 probably want to decode the captured data using the linklayer.Decoder
-class. At end of file an EOFError exception is raised.
+class. At end of file an `EOFError` exception is raised.
 
 ```python
 with open('oldschool.pcap', 'rb') as fp:
@@ -114,7 +114,7 @@ with open('oldschool.pcap', 'rb') as fp:
             # should check for truncation first
             pkt_data, pkt_type, pkt_info = decoder.decode(cap_data)
             # do something with pkt_hdr or pkt_data
-    except EOFError"
+    except EOFError:
         pass
 ```
 
@@ -163,10 +163,11 @@ PcapNG file:
 | `link_errors` | A set of errors on receiving this packet which may contain "symbol", "preamble", "start frame delimiter", "unaligned fram", "wrong inter-frame gap", "packet too short", and "CRC" |
 
 Like pcap files, PcapNG files can be read directly, although using the
-PcapNGFile class. You will probably want to decode the captured data,
-although this is slightly more complicated than for pcap files since
-the interface used can be different for each packet and may have a
-different link layer. At end of file an EOFError exception is raised.
+PcapNGFile class instead of the PcapFile. You will probably want to
+decode the captured data, although this is slightly more complicated
+than for pcap files since the interface used can be different for each
+packet and may have a different link layer. At end of file an
+`EOFError` exception is raised.
 
 ```python
 with open('nextgen.pcap', 'rb') as fp:
@@ -180,7 +181,7 @@ with open('nextgen.pcap', 'rb') as fp:
             pkt_data, pkt_type, pkt_info = decode(pcapngfile.byte_order, 
                                                   pkt_block.pkt_data)
             # do something with pkt_hdr or pkt_data
-    except EOFError"
+    except EOFError:
         pass
 ```
 
