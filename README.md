@@ -104,13 +104,14 @@ probably want to decode the captured data using the linklayer.Decoder
 class. At end of file an EOFError exception is raised.
 
 ```python
-with open('blessedpackets.pcap', 'rb') as fp:
+with open('oldschool.pcap', 'rb') as fp:
     pcapfile = yapcap.PcapFile(fp)
     decoder = yapcap.linklayer.Decoder(pcapfile.network,
                                        pcapfile.byte_order)
     try:
         while True:
             pkt_hdr, cap_data = pcapfile.read_pkt()
+            # should check for truncation first
             pkt_data, pkt_type, pkt_info = decoder.decode(cap_data)
             # do something with pkt_hdr or pkt_data
     except EOFError"
@@ -147,6 +148,7 @@ PcapNG file:
 | `if_os`          | OS of the machine that has the interface, like `"Windows 8"` |
 | `if_fcslen`      | Length of Frame Check Sequence for this interface, in bits |
 | `if_tsoffset`    | Timestamp offset in seconds |
+| `epb_comment`    | Comment from the enhanced packet block |
 | `epb_flags`      | Packet flags (see below for details) |
 | `epb_hash`       | Hash type and value, like `("CRC32", b'\x80\x1f\xc8\x18')` |
 | `epb_dropcount`  | Count of packets dropped since last packet captured |
@@ -160,7 +162,27 @@ PcapNG file:
 | `fcs_len`     | The Frame Check Sequence for this packet (overrides `if_fcslen` if that exists), or `None` |
 | `link_errors` | A set of errors on receiving this packet which may contain "symbol", "preamble", "start frame delimiter", "unaligned fram", "wrong inter-frame gap", "packet too short", and "CRC" |
 
-TODO: document how to read blocks directly...
+Like pcap files, PcapNG files can be read directly, although using the
+PcapNGFile class. You will probably want to decode the captured data,
+although this is slightly more complicated than for pcap files since
+the interface used can be different for each packet and may have a
+different link layer. At end of file an EOFError exception is raised.
+
+```python
+with open('nextgen.pcap', 'rb') as fp:
+    pcapngfile = yapcap.PcapNGFile(fp)
+    try:
+        while True:
+            pkt_block, if_block, sh_block = pcapngfile.read_pkt()
+            # should verify we understand the linktype
+            decode = linklayer[if_block.linktype]
+            # should check for truncation first
+            pkt_data, pkt_type, pkt_info = decode(pcapngfile.byte_order, 
+                                                  pkt_block.pkt_data)
+            # do something with pkt_hdr or pkt_data
+    except EOFError"
+        pass
+```
 
 ## Performance Considerations
 
