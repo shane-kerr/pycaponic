@@ -142,7 +142,7 @@ PcapNG file:
 | `if_EUIaddr`     | The EUI address of the interface, like `"00-01-2E-78-08-B1-01-FC"` |
 | `if_speed`       | Speed of the interface in bits per second |
 | `if_tsresol`     | Resolution of timestamps (1000 means msec, 1000000 means usec, and so on) |
-| `if_tzone`       | _Time zone offset? (This is not well-specified.)_ |
+| `if_tzone`       | Time zone offset in seconds |
 | `if_filter`      | Filter type and string, like `(0, "host 192.0.2.11 and port 53")`
 | `if_os`          | OS of the machine that has the interface, like `"Windows 8"` |
 | `if_fcslen`      | Length of Frame Check Sequence for this interface, in bits |
@@ -151,9 +151,16 @@ PcapNG file:
 | `epb_hash`       | Hash type and value, like `("CRC32", b'\x80\x1f\xc8\x18')` |
 | `epb_dropcount`  | Count of packets dropped since last packet captured |
 
-The `epb_flags` has the following possible values
+`epb_flags` is a named tuple and contains the following members:
 
-TODO: finish the descriptions, document how to read blocks directly...
+| Name          | Description |
+|---------------|-------------|
+| `in_out_pkt`  | Direction of the packet; "information not available", "inbound", or "outbound" |
+| `reception`   | How packet was received; "not specified", "unicast", "multicast", "broadcast", or "promiscuous" |
+| `fcs_len`     | The Frame Check Sequence for this packet (overrides `if_fcslen` if that exists), or `None` |
+| `link_errors` | A set of errors on receiving this packet which may contain "symbol", "preamble", "start frame delimiter", "unaligned fram", "wrong inter-frame gap", "packet too short", and "CRC" |
+
+TODO: document how to read blocks directly...
 
 ## Performance Considerations
 
