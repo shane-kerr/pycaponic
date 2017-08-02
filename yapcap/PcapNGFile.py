@@ -206,21 +206,21 @@ def opt_epb_flags(buf, byte_order):
     if reserved != 0:
         raise PcapNGFileError("reserved bits set in EPB flags")
 
-    errors = []
+    errors = set()
     if opt_val & 0b10000000000000000000000000000000:
-        errors.append("symbol")
+        errors.add("symbol")
     if opt_val & 0b01000000000000000000000000000000:
-        errors.append("preamble")
+        errors.add("preamble")
     if opt_val & 0b00100000000000000000000000000000:
-        errors.append("start frame delimiter")
+        errors.add("start frame delimiter")
     if opt_val & 0b00010000000000000000000000000000:
-        errors.append("unaligned frame")
+        errors.add("unaligned frame")
     if opt_val & 0b00001000000000000000000000000000:
-        errors.append("wrong inter-frame gap")
+        errors.add("wrong inter-frame gap")
     if opt_val & 0b00000100000000000000000000000000:
-        errors.append("packet too short")
+        errors.add("packet too short")
     if opt_val & 0b00000010000000000000000000000000:
-        errors.append("CRC")
+        errors.add("CRC")
 
     return EPBflags(in_out_pkt=in_out_pkt,
                     reception=reception_type,
