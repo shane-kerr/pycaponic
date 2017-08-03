@@ -5,8 +5,11 @@ http://www.tcpdump.org/linktypes.html
 """
 import struct
 
+# TODO: handle unknown EtherType values
+
 # https://en.wikipedia.org/wiki/EtherType
 ETHERTYPE_IPv4 = 0x0800
+ETHERTYPE_ARP = 0x0806
 ETHERTYPE_IPv6 = 0x86DD
 
 LINKTYPE_NULL = 0
@@ -15,6 +18,15 @@ LINKTYPE_RAW = 101
 LINKTYPE_LOOP = 108
 LINKTYPE_IPV4 = 228
 LINKTYPE_IPV6 = 229
+
+LINKTYPES = {
+    LINKTYPE_NULL: "BSD loopback encapsulation",
+    LINKTYPE_ETHERNET: "Ethernet",
+    LINKTYPE_RAW: "raw IP",
+    LINKTYPE_LOOP: "OpenBSD loopback encapsulation",
+    LINKTYPE_IPV4: "IPv4",
+    LINKTYPE_IPV6: "IPv6",
+}
 
 class LinkLayerError(Exception):
     pass
@@ -49,8 +61,10 @@ def decode_ethernet(_, link_pkt):
         pkt_type = "IPv4"
     elif ethertype == ETHERTYPE_IPv6:
         pkt_type = "IPv6"
+    elif ethertype == ETHERTYPE_ARP:
+        pkt_type = "ARP"
     else:
-        raise LinkLayerError("unknown type of Ethernet packet")
+        pkt_type = "EtherType 0x%04X" % ethertype
     info = { "mac_dst": mac_dst, "mac_src": mac_src, }
     return payload, pkt_type, info
 
