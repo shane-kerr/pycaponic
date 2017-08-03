@@ -56,16 +56,16 @@ The following metadata is present for all packets:
 | `linktype`  | The type of link-layer header metadata for the packet |
 | `timestamp` | The epoch value where the packet arrived, as a `decimal.Decimal` value |
 | `origlen`   | The original length of the packet |
-| `pkttype`   | The type of the packet: IPv4, IPv6, OSI, or IPX |
+| `caplen`    | The captured length of the packet |
+| `pkttype`   | The type of the packet: IPv4, IPv6, ARP, OSI, IPX, or "EtherType 0xNNNN" |
 
 We use a `decimal.Decimal` type for the timestamp because the
 precision of the timestamps in the file may be too much to fit in a
 `float` type or `datetime.datetime` object (both only support
 microsecond accuracy).
 
-No metadata describes the length of the captured packet. Use
-`len(packet.data)` if you need this. If a packet was truncated, the
-`orig_len` value is longer than the length of the captured packet.
+Note that the packet returned in `pkt.data` has the encapsulation
+information removed.
 
 ## Link-layer Header Metadata
 
@@ -86,8 +86,8 @@ will also have the source and destination MAC address of the packet:
 
 | Name        | Description |
 |-------------|-------------|
-| `src_mac`   | The source MAC address of the packet, as a string like `"70-85-C2-3B-E8-F0"` |
-| `dst_mac`   | The destination MAC address of the packet, as a string like `"00-01-2E-78-08-B1"` |
+| `mac_src`   | The source MAC address of the packet, as a string like `"70-85-C2-3B-E8-F0"` |
+| `mac_dst`   | The destination MAC address of the packet, as a string like `"00-01-2E-78-08-B1"` |
 
 The full list of link-layer header types can be found here:
 
