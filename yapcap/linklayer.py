@@ -5,8 +5,11 @@ http://www.tcpdump.org/linktypes.html
 """
 import struct
 
+# TODO: handle unknown EtherType values
+
 # https://en.wikipedia.org/wiki/EtherType
 ETHERTYPE_IPv4 = 0x0800
+ETHERTYPE_ARP = 0x0806
 ETHERTYPE_IPv6 = 0x86DD
 
 LINKTYPE_NULL = 0
@@ -15,6 +18,16 @@ LINKTYPE_RAW = 101
 LINKTYPE_LOOP = 108
 LINKTYPE_IPV4 = 228
 LINKTYPE_IPV6 = 229
+
+LINKTYPES = {
+    LINKTYPE_NULL: "BSD loopback encapsulation",
+    LINKTYPE_ETHERNET: "Ethernet",
+    LINKTYPE_RAW: "raw IP",
+    LINKTYPE_LOOP: "OpenBSD loopback encapsulation",
+    LINKTYPE_IPV4: "IPv4",
+    LINKTYPE_IPV6: "IPv6",
+}
+
 
 class LinkLayerError(Exception):
     pass
@@ -41,18 +54,21 @@ def decode_null(byte_order, link_pkt):
 def decode_ethernet(_, link_pkt):
     if len(link_pkt) < 14:
         raise LinkLayerError("Ethernet packet too small")
-    mac_dst = ":".join((("%02x" % n) for n in link_pkt[0:6]))
-    mac_src = ":".join((("%02x" % n) for n in link_pkt[6:12]))
+    mac_dst = "%02X-%02X-%02X-%02X-%02X-%02X" % tuple(link_pkt[0:6])
+    mac_src = "%02X-%02X-%02X-%02X-%02X-%02X" % tuple(link_pkt[6:12])
     ethertype, = struct.unpack("!H", link_pkt[12:14])
     payload = link_pkt[14:]
     if ethertype == ETHERTYPE_IPv4:
         pkt_type = "IPv4"
     elif ethertype == ETHERTYPE_IPv6:
         pkt_type = "IPv6"
+    elif ethertype == ETHERTYPE_ARP:
+        pkt_type = "ARP"
     else:
-        raise LinkLayerError("unknown type of Ethernet packet")
-    info = { "mac_dst": mac_dst, "mac_src": mac_src, }
+        pkt_type = "EtherType 0x%04X" % ethertype
+    info = {"mac_dst": mac_dst, "mac_src": mac_src, }
     return payload, pkt_type, info
+
 
 def decode_raw(_, link_pkt):
     if len(link_pkt) < 1:
@@ -64,16 +80,20 @@ def decode_raw(_, link_pkt):
         pkt_type = "IPv4"
     else:
         raise LinkLayerError("raw packet not IPv4 or IPv6")
-    return payload, pkt_type, {}
+    return link_pkt, pkt_type, {}
+
 
 def decode_loop(_, link_pkt):
     return decode_null("!", link_pkt)
 
+
 def decode_ipv4(_, link_pkt):
-    return payload, "IPv4", {}
+    return link_pkt, "IPv4", {}
+
 
 def decode_ipv6(_, link_pkt):
-    return payload, "IPv6", {}
+    return link_pkt, "IPv6", {}
+
 
 LINK_DECODERS = {
     LINKTYPE_NULL: decode_null,

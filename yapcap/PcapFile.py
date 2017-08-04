@@ -7,6 +7,7 @@ import collections
 import decimal
 import struct
 
+
 class PcapFileError(Exception):
     pass
 
@@ -20,10 +21,10 @@ PacketHeader = collections.namedtuple('PacketHeader', ['timestamp',
 
 
 class PcapFile:
-    def __init__(self, fp):
+    def __init__(self, fp, header_buf=b''):
         self.file = fp
 
-        buf = self.file.read(24)
+        buf = header_buf + self.file.read(24-len(header_buf))
         if len(buf) < 24:
             raise PcapFileError("global header too small")
 
@@ -55,7 +56,7 @@ class PcapFile:
         if len(header) < 16:
             raise PcapFileError("packet header too small")
 
-        (ts_sec,ts_usec,
+        (ts_sec, ts_usec,
          incl_len, orig_len) = struct.unpack(self.byte_order+"IIII", header)
 
         # calculate the time

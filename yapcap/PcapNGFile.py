@@ -1,10 +1,16 @@
 """
 Open and read Pcap-NG files.
 
+
 https://pcapng.github.io/pcapng/
 
+https://github.com/pcapng/pcapng
 https://www.winpcap.org/ntar/draft/PCAP-DumpFileFormat.html
 
+TODO: MAC address formatting (70-85-C2-3B-E8-F0)
+      https://standards.ieee.org/develop/regauth/tut/eui48.pdf
+TODO: EUI address formatting (70-85-C2-01-F3-3B-E8-F0)
+      https://standards.ieee.org/develop/regauth/tut/eui64.pdf
 TODO: generator mode
 TODO: skip parsing options if not needed
 TODO: a more liberal mode for parsing
@@ -104,11 +110,27 @@ def opt_ipv6(buf, _):
     return opt_val
 
 
+def opt_int32(buf, byte_order):
+    """
+    Convert to a signed 32-bit integer.
+    """
+    opt_val, = struct.unpack(byte_order+"i", buf)
+    return opt_val
+
+
+def opt_int64(buf, byte_order):
+    """
+    Convert to a signed 64-bit integer.
+    """
+    opt_val, = struct.unpack(byte_order+"q", buf)
+    return opt_val
+
+
 def opt_uint64(buf, byte_order):
     """
     Convert to an unsigned 64-bit integer.
     """
-    opt_val, = struct.unpack(byte_order+"I", buf)
+    opt_val, = struct.unpack(byte_order+"Q", buf)
     return opt_val
 
 
@@ -184,21 +206,21 @@ def opt_epb_flags(buf, byte_order):
     if reserved != 0:
         raise PcapNGFileError("reserved bits set in EPB flags")
 
-    errors = []
+    errors = set()
     if opt_val & 0b10000000000000000000000000000000:
-        errors.append("symbol")
+        errors.add("symbol")
     if opt_val & 0b01000000000000000000000000000000:
-        errors.append("preamble")
+        errors.add("preamble")
     if opt_val & 0b00100000000000000000000000000000:
-        errors.append("start frame delimiter")
+        errors.add("start frame delimiter")
     if opt_val & 0b00010000000000000000000000000000:
-        errors.append("unaligned frame")
+        errors.add("unaligned frame")
     if opt_val & 0b00001000000000000000000000000000:
-        errors.append("wrong inter-frame gap")
+        errors.add("wrong inter-frame gap")
     if opt_val & 0b00000100000000000000000000000000:
-        errors.append("packet too short")
+        errors.add("packet too short")
     if opt_val & 0b00000010000000000000000000000000:
-        errors.append("CRC")
+        errors.add("CRC")
 
     return EPBflags(in_out_pkt=in_out_pkt,
                     reception=reception_type,
@@ -285,7 +307,7 @@ OPTION_CHECKS_IF = {
     IF_TSRESOL: OptionCheck(opt_name='if_tsresol',
                             opt_len=1, opt_max_occur=1, opt_fn=opt_tsresol),
     IF_TZONE: OptionCheck(opt_name='if_tzone',
-                          opt_len=4, opt_max_occur=1, opt_fn=None),
+                          opt_len=4, opt_max_occur=1, opt_fn=opt_int32),
     IF_FILTER: OptionCheck(opt_name='if_filter',
                            opt_len=None, opt_max_occur=1, opt_fn=opt_filter),
     IF_OS: OptionCheck(opt_name='if_os',
@@ -293,7 +315,7 @@ OPTION_CHECKS_IF = {
     IF_FCSLEN: OptionCheck(opt_name='if_fcslen',
                            opt_len=1, opt_max_occur=1, opt_fn=None),
     IF_TSOFFSET: OptionCheck(opt_name='if_tsoffset',
-                             opt_len=8, opt_max_occur=1, opt_fn=opt_uint64),
+                             opt_len=8, opt_max_occur=1, opt_fn=opt_int64),
 }
 
 OPTION_CHECKS_EPB = {
@@ -325,12 +347,12 @@ EnhancedPacketBlock = collections.namedtuple('EnhancedPacketBlock',
 
 
 class PcapNGFile:
-    def __init__(self, fp):
+    def __init__(self, fp, header_buf=''):
         self.file = fp
         self.byte_order = ''
 
         # We start off reading the section header block.
-        blk_type, buf = self._read_block()
+        blk_type, buf = self._read_block(header_buf)
         if blk_type != BLK_TYPE_SHB:
             raise PcapNGFileError("first block must be a Section Header Block")
         shb = self._parse_section_header_block(buf)
@@ -561,12 +583,13 @@ class PcapNGFile:
                                    pkt_data=pkt_data,
                                    options=options)
 
-    def _read_block(self):
+    def _read_block(self, header_buf=b''):
         """
         Read a block.
         """
         # Read the block type and block length.
-        header_buf = self.file.read(8)
+        if len(header_buf) < 8:
+            header_buf += self.file.read(8-len(header_buf))
 
         # Handle EOF
         if header_buf == b'':
@@ -634,6 +657,8 @@ if __name__ == '__main__':
         print(pcapf.shb)
         try:
             while True:
-                print(pcapf.read_pkt())
+                result = pcapf.read_pkt()
+                pkt_data = result[0].pkt_data
+                print(result)
         except EOFError:
             pass
