@@ -347,12 +347,12 @@ EnhancedPacketBlock = collections.namedtuple('EnhancedPacketBlock',
 
 
 class PcapNGFile:
-    def __init__(self, fp):
+    def __init__(self, fp, header_buf=''):
         self.file = fp
         self.byte_order = ''
 
         # We start off reading the section header block.
-        blk_type, buf = self._read_block()
+        blk_type, buf = self._read_block(header_buf)
         if blk_type != BLK_TYPE_SHB:
             raise PcapNGFileError("first block must be a Section Header Block")
         shb = self._parse_section_header_block(buf)
@@ -583,12 +583,13 @@ class PcapNGFile:
                                    pkt_data=pkt_data,
                                    options=options)
 
-    def _read_block(self):
+    def _read_block(self, header_buf=b''):
         """
         Read a block.
         """
         # Read the block type and block length.
-        header_buf = self.file.read(8)
+        if len(header_buf) < 8:
+            header_buf += self.file.read(8-len(header_buf))
 
         # Handle EOF
         if header_buf == b'':

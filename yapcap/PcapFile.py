@@ -20,7 +20,7 @@ PacketHeader = collections.namedtuple('PacketHeader', ['timestamp',
 
 
 class PcapFile:
-    def __init__(self, fp, header_buf=''):
+    def __init__(self, fp, header_buf=b''):
         self.file = fp
 
         buf = header_buf + self.file.read(24-len(header_buf))

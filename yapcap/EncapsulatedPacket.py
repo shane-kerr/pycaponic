@@ -1,8 +1,9 @@
 import sys
 import time
 
-from yapcap.linklayer import Decoder, LINKTYPES
+from yapcap.linklayer import Decoder, LINKTYPES, LINK_DECODERS
 from yapcap.PcapFile import PcapFile
+from yapcap.PcapNGFile import PcapNGFile
 
 class EncapsulatedPacketException(Exception):
     pass
@@ -43,11 +44,14 @@ class EncapsulatedPacket:
         mac_dst = getattr(self, "mac_dst")
         if mac_dst:
             out.write("mac_dst = %s\n" % mac_dst)
+        for attr in sorted(dir(self)):
+            if (attr.startswith("shb_") or attr.startswith("if_") or
+                attr.startswith("epb_")):
+                out.write(attr + " = " + getattr(self, attr) + "\n")
         if dump_contents:
             _hexdump(self.data, out)
 
 def _read_pcapfile(fp, header_buf):
-    pcap_type = 'pcap'
     pcapfp = PcapFile(fp, header_buf)
     decoder = Decoder(pcapfp.network, pcapfp.byte_order)
     try:
@@ -71,6 +75,49 @@ def _read_pcapfile(fp, header_buf):
     except EOFError:
         pass
 
+def _read_pcapngfile(fp, header_buf):
+    pcap_type = 'pcapng'
+    pcapngfp = PcapNGFile(fp, header_buf)
+    try:
+        while True:
+            epb, ifb, shb = pcapngfp.read_pkt()
+
+            pkt = EncapsulatedPacket()
+            pkt.cap_type = 'pcapng'
+            pkt.version = '1.0'
+            pkt.snaplen = ifb.snaplen
+            pkt.linktype = ifb.linktype
+            pkt.timestamp = epb.timestamp
+            pkt.origlen = epb.original_len
+            pkt.caplen = epb.capture_len
+            decoder = LINK_DECODERS.get(ifb.linktype)
+            if not decoder:
+                msg = "unknown link type 0x04X on interface" % ifb.linktype
+                raise EncapsulatedPacketException(msg)
+            pkt.data, pkt.pkttype, link_metadata = decoder(pcapngfp.byte_order,
+                                                           epb.pkt_data)
+            if "mac_src" in link_metadata:
+                pkt.mac_src = link_metadata["mac_src"]
+            if "mac_dst" in link_metadata:
+                pkt.mac_dst = link_metadata["mac_dst"]
+
+            # since "opt_comment" can appear in every block, we
+            # rename it based on which block it appears in
+            if "opt_comment" in shb.options:
+                pkt.shb_comment = shb.options["opt_comment"]
+            if "opt_comment" in ifb.options:
+                pkt.if_comment = ifb.options["opt_comment"]
+            if "opt_comment" in epb.options:
+                pkt.epb_comment = epb.options["opt_comment"]
+
+            # other options get added
+            for opt_name, opt_val in shb.options.items():
+                if opt_name != "opt_comment":
+                    setattr(pkt, opt_name, opt_val)
+            yield pkt
+    except EOFError:
+        pass
+
 def packets(fp):
     file_type = fp.read(4)
     if len(file_type) < 4:
@@ -79,5 +126,10 @@ def packets(fp):
                      bytes([0xd4, 0xc3, 0xb2, 0xa1])):
         for pkt in _read_pcapfile(fp, file_type):
             yield pkt
-    elif file_type == b'':
-        pass
+    elif file_type == bytes([0x0a, 0x0d, 0x0d, 0x0a]):
+        for pkt in _read_pcapngfile(fp, file_type):
+            yield pkt
+    else:
+        file_type_hex = "0x" + "".join("%02X" % c for c in list(file_type))
+        msg = "unrecognized header " + file_type_hex
+        raise EncapsulatedPacketException(msg)
