@@ -28,6 +28,7 @@ LINKTYPES = {
     LINKTYPE_IPV6: "IPv6",
 }
 
+
 class LinkLayerError(Exception):
     pass
 
@@ -65,8 +66,9 @@ def decode_ethernet(_, link_pkt):
         pkt_type = "ARP"
     else:
         pkt_type = "EtherType 0x%04X" % ethertype
-    info = { "mac_dst": mac_dst, "mac_src": mac_src, }
+    info = {"mac_dst": mac_dst, "mac_src": mac_src, }
     return payload, pkt_type, info
+
 
 def decode_raw(_, link_pkt):
     if len(link_pkt) < 1:
@@ -78,16 +80,20 @@ def decode_raw(_, link_pkt):
         pkt_type = "IPv4"
     else:
         raise LinkLayerError("raw packet not IPv4 or IPv6")
-    return payload, pkt_type, {}
+    return link_pkt, pkt_type, {}
+
 
 def decode_loop(_, link_pkt):
     return decode_null("!", link_pkt)
 
+
 def decode_ipv4(_, link_pkt):
-    return payload, "IPv4", {}
+    return link_pkt, "IPv4", {}
+
 
 def decode_ipv6(_, link_pkt):
-    return payload, "IPv6", {}
+    return link_pkt, "IPv6", {}
+
 
 LINK_DECODERS = {
     LINKTYPE_NULL: decode_null,

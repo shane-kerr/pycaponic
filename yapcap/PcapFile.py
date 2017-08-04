@@ -7,6 +7,7 @@ import collections
 import decimal
 import struct
 
+
 class PcapFileError(Exception):
     pass
 
@@ -55,7 +56,7 @@ class PcapFile:
         if len(header) < 16:
             raise PcapFileError("packet header too small")
 
-        (ts_sec,ts_usec,
+        (ts_sec, ts_usec,
          incl_len, orig_len) = struct.unpack(self.byte_order+"IIII", header)
 
         # calculate the time

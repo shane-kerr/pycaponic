@@ -5,8 +5,10 @@ from yapcap.linklayer import Decoder, LINKTYPES, LINK_DECODERS
 from yapcap.PcapFile import PcapFile
 from yapcap.PcapNGFile import PcapNGFile
 
+
 class EncapsulatedPacketException(Exception):
     pass
+
 
 def _hexdump(data, out):
     ofs = 0
@@ -46,10 +48,11 @@ class EncapsulatedPacket:
             out.write("mac_dst = %s\n" % mac_dst)
         for attr in sorted(dir(self)):
             if (attr.startswith("shb_") or attr.startswith("if_") or
-                attr.startswith("epb_")):
+               attr.startswith("epb_")):
                 out.write(attr + " = " + getattr(self, attr) + "\n")
         if dump_contents:
             _hexdump(self.data, out)
+
 
 def _read_pcapfile(fp, header_buf):
     pcapfp = PcapFile(fp, header_buf)
@@ -75,8 +78,8 @@ def _read_pcapfile(fp, header_buf):
     except EOFError:
         pass
 
+
 def _read_pcapngfile(fp, header_buf):
-    pcap_type = 'pcapng'
     pcapngfp = PcapNGFile(fp, header_buf)
     try:
         while True:
@@ -118,11 +121,12 @@ def _read_pcapngfile(fp, header_buf):
     except EOFError:
         pass
 
+
 def packets(fp):
     file_type = fp.read(4)
     if len(file_type) < 4:
         raise EncapsulatedPacketException("pcap/PcapNG header too small")
-    if file_type in (bytes([0xa1, 0xb2, 0xc3, 0xd4]), 
+    if file_type in (bytes([0xa1, 0xb2, 0xc3, 0xd4]),
                      bytes([0xd4, 0xc3, 0xb2, 0xa1])):
         for pkt in _read_pcapfile(fp, file_type):
             yield pkt
