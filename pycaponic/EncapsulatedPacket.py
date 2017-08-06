@@ -52,7 +52,7 @@ class EncapsulatedPacket:
         for attr in sorted(dir(self)):
             if (attr.startswith("shb_") or attr.startswith("if_") or
                attr.startswith("epb_")):
-                out.write(attr + " = " + getattr(self, attr) + "\n")
+                out.write(attr + " = " + str(getattr(self, attr)) + "\n")
         if dump_contents:
             _hexdump(self.data, out)
 
