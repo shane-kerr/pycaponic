@@ -566,9 +566,9 @@ class PcapNGFile:
 
         # figure out the time
         if_descr = self.if_descr[interface_id]
-        if_ts_resol = if_descr.options.get("if_tsresol", DEFAULT_TS_RESOL)
+        if_tsresol = if_descr.options.get("if_tsresol", DEFAULT_TSRESOL)
         timestamp = (timestamp_hi << 32) + timestamp_lo
-        pkt_time = decimal.Decimal(timestamp) / decimal.Decimal(if_ts_resol)
+        pkt_time = decimal.Decimal(timestamp) / decimal.Decimal(if_tsresol)
 
         pkt_data = buf[20:20+capture_len]
         if len(pkt_data) != capture_len:
