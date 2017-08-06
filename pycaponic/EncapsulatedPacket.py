@@ -117,8 +117,20 @@ def _read_pcapngfile(fp, header_buf):
                 pkt.epb_comment = epb.options["opt_comment"]
 
             # other options get added
+            skip_options = set(("opt_comment",
+                                "epb_timestamp",
+                                "epb_original_len",
+                                "epb_capture_len",
+                                "if_snaplen",
+                                "if_linktype",))
             for opt_name, opt_val in shb.options.items():
-                if opt_name != "opt_comment":
+                if opt_name not in skip_options:
+                    setattr(pkt, opt_name, opt_val)
+            for opt_name, opt_val in ifb.options.items():
+                if opt_name not in skip_options:
+                    setattr(pkt, opt_name, opt_val)
+            for opt_name, opt_val in epb.options.items():
+                if opt_name not in skip_options:
                     setattr(pkt, opt_name, opt_val)
             yield pkt
     except EOFError:
