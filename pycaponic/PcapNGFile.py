@@ -22,7 +22,7 @@ import struct
 from pycaponic.pycaponicError import pycaponicError
 
 
-class PcapNGFileError(pcaponicError):
+class PcapNGFileError(pycaponicError):
     pass
 
 
