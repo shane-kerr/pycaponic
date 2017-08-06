@@ -1,4 +1,4 @@
-# yapcap: Yet Another PCAP module for Python
+# pycaponic: a Pythonic pcap module
 
 This module allows you to easily read pcap and PcapNG files in Python.
 
@@ -13,7 +13,7 @@ Usage is something like this:
 
 ```python
 with open('myfile.pcap', 'rb') as pcapfp:
-    for packet in yapcap.packets(pcapfp):
+    for packet in pycaponic.packets(pcapfp):
         # access metadata as packet.timestamp, packet.info.pkt_type, ...
         # access contents as packet.data
 ```
@@ -23,17 +23,17 @@ something like the `gzip` or `bz2` modules to read them:
 
 ```python
 with gzip.open('myfile.pcap.gz') as pcapfp:
-    for packet in yapcap.packets(pcapfp):
+    for packet in pcaponic.packets(pcapfp):
         ...
 ```
 
 ## Exceptions
 
-If an error is found in the input file, a yapcapError will be raised.
+If an error is found in the input file, a pycaponicError will be raised.
 pcap and PcapNG files have their own classes:
 
 ```
-+-- yapcapError
++-- pycaponicError
     |
     +-- PcapError
     |
@@ -72,7 +72,7 @@ information removed.
 Depending on the format used, there may be additional link-level
 header information.
 
-The yapcap package currently supports:
+The pycaponic package currently supports:
 
 * LINKTYPE_NULL
 * LINKTYPE_ETHERNET
@@ -105,9 +105,9 @@ class. At end of file an `EOFError` exception is raised.
 
 ```python
 with open('oldschool.pcap', 'rb') as fp:
-    pcapfile = yapcap.PcapFile(fp)
-    decoder = yapcap.linklayer.Decoder(pcapfile.network,
-                                       pcapfile.byte_order)
+    pcapfile = pycaponic.PcapFile(fp)
+    decoder = pycaponic.linklayer.Decoder(pcapfile.network,
+                                          pcapfile.byte_order)
     try:
         while True:
             pkt_hdr, cap_data = pcapfile.read_pkt()
@@ -171,7 +171,7 @@ packet and may have a different link layer. At end of file an
 
 ```python
 with open('nextgen.pcap', 'rb') as fp:
-    pcapngfile = yapcap.PcapNGFile(fp)
+    pcapngfile = pycaponic.PcapNGFile(fp)
     try:
         while True:
             pkt_block, if_block, sh_block = pcapngfile.read_pkt()

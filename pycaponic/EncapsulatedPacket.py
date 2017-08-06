@@ -1,9 +1,9 @@
 import sys
 import time
 
-from yapcap.linklayer import Decoder, LINKTYPES, LINK_DECODERS
-from yapcap.PcapFile import PcapFile
-from yapcap.PcapNGFile import PcapNGFile
+from pycaponic.linklayer import Decoder, LINKTYPES, LINK_DECODERS
+from pycaponic.PcapFile import PcapFile
+from pycaponic.PcapNGFile import PcapNGFile
 
 
 class EncapsulatedPacketException(Exception):
