@@ -29,6 +29,9 @@ def _hexdump(data, out):
 
 
 class EncapsulatedPacket:
+    def __getattr__(self, name):
+        return None
+
     def dump(self, out=sys.stdout, dump_contents=False):
         out.write("cap_type = %s\n" % self.cap_type)
         out.write("version = %s\n" % self.version)
