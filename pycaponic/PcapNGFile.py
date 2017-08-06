@@ -19,9 +19,10 @@ import collections
 import decimal
 import ipaddress
 import struct
+from pycaponic.pycaponicError import pycaponicError
 
 
-class PcapNGFileError(Exception):
+class PcapNGFileError(pcaponicError):
     pass
 
 

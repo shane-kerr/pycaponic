@@ -1,0 +1,2 @@
+class pycaponicError(Exception):
+    pass

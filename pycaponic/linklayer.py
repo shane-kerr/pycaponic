@@ -4,6 +4,7 @@ Parse link-layer headers used by pcap and pcap-ng capture files:
 http://www.tcpdump.org/linktypes.html
 """
 import struct
+from pycaponic.pycaponicError import pycaponicError
 
 # TODO: handle unknown EtherType values
 
@@ -29,7 +30,7 @@ LINKTYPES = {
 }
 
 
-class LinkLayerError(Exception):
+class LinkLayerError(pycaponicError):
     pass
 
 

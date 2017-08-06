@@ -6,9 +6,11 @@ https://wiki.wireshark.org/Development/LibpcapFileFormat
 import collections
 import decimal
 import struct
+from pycaponic.pycaponicError import pycaponicError
 
 
-class PcapFileError(Exception):
+
+class PcapFileError(pycaponicError):
     pass
 
 
