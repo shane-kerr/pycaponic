@@ -27,6 +27,8 @@ with gzip.open('myfile.pcap.gz') as pcapfp:
         ...
 ```
 
+You can find some examples in the `examples` directory.
+
 ## Exceptions
 
 If an error is found in the input file, a pycaponicError will be raised.
