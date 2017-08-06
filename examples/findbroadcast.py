@@ -18,7 +18,6 @@ broadcast packet or not. If it was broadcast, we also print the packet
 type.
 """
 import sys
-import time
 
 # Normally you can just use "import pycaponic", but if we cannot
 # import it, try again adding the parent directory. This lets us run
@@ -32,6 +31,7 @@ except ImportError:
     except ImportError:
         sys.path.append("..")
         import pycaponic
+
 
 def process(handle):
     """
@@ -59,7 +59,11 @@ def process(handle):
         else:
             print("%s -> not broadcast" % when)
 
+
 def main():
+    """
+    Program entry point.
+    """
     # Get the list of files from the arguments.
     files = sys.argv[1:]
     # If no files were specified, read from stdin only.
@@ -75,6 +79,7 @@ def main():
         else:
             with open(fname, "rb") as handle:
                 process(handle)
+
 
 if __name__ == '__main__':
     main()
