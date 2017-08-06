@@ -6,8 +6,12 @@ import sys
 try:
     import pycaponic
 except ImportError:
-    sys.path.append("..")
-    import pycaponic
+    try:
+        sys.path.append(".")
+        import pycaponic
+    except ImportError:
+        sys.path.append("..")
+        import pycaponic
 
 def process(handle):
     for packet in pycaponic.packets(handle):
