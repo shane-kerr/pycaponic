@@ -28,6 +28,12 @@ def _hexdump(data, out):
         ofs += 16
 
 
+def epoch2iso8601(epoch):
+    sec = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(epoch))
+    sec_fract = ("%f" % (epoch % 1))[1:]
+    return sec + sec_fract
+
+
 class EncapsulatedPacket:
     def __getattr__(self, name):
         return None
@@ -37,9 +43,7 @@ class EncapsulatedPacket:
         out.write("version = %s\n" % self.version)
         out.write("snaplen = %d\n" % self.snaplen)
         out.write("linktype = %s\n" % LINKTYPES[self.linktype])
-        sec = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(self.timestamp))
-        sec_fract = ("%f" % (self.timestamp % 1))[1:]
-        out.write("timestamp = %s%s\n" % (sec, sec_fract))
+        out.write("timestamp = %s\n" % epoch2iso8601(self.timestamp))
         out.write("origlen = %d\n" % self.origlen)
         out.write("caplen = %d\n" % self.caplen)
         out.write("pkttype = %s\n" % self.pkttype)
