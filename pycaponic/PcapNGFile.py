@@ -27,7 +27,7 @@ class PcapNGFileError(pycaponicError):
 
 
 # default time resolution
-DEFAULT_TS_RESOL = decimal.Decimal(1000000)
+DEFAULT_TSRESOL = decimal.Decimal(1000000)
 
 
 # block types
