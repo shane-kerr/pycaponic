@@ -9,7 +9,6 @@ import struct
 from pycaponic.pycaponicError import pycaponicError
 
 
-
 class PcapFileError(pycaponicError):
     pass
 
