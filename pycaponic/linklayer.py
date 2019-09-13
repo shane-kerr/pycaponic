@@ -153,7 +153,7 @@ def decode_linux_sll(_, link_pkt):
         pkt_type = "EtherType 0x%04X" % sll_protocol
         sll_protocol = str(sll_protocol)
 
-    info = {
+    sll_info = {
         'sll_pkttype': sll_pkttype,
         'sll_hatype': sll_hatype,
         'sll_halen': sll_halen,
@@ -161,7 +161,7 @@ def decode_linux_sll(_, link_pkt):
         'sll_protocol': sll_protocol,
     }
 
-    return link_pkt[16:], pkt_type, info
+    return link_pkt[16:], pkt_type, { "mac_src": sll_addr, }
 
 
 LINK_DECODERS = {
